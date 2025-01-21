@@ -1,0 +1,70 @@
+\documentclass{book}
+\usepackage[a4paper,width=150mm,top=25mm,bottom=30mm,left=35mm,right=15mm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[acronym,nonumberlist,toc]{glossaries}
+\usepackage[automake,stylemods={tree}]{glossaries-extra}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+
+% Abilita il campo group
+\glsaddkey{group}{}{\glsentrygroup}{\GLsentrygroup}{\glsgroup}{\GLSgroup}{\GLSGroup}
+
+% Definizione dei gruppi
+\glsxtrsetgrouptitle{dac}{DEFINIZIONI ACUSTICHE}
+\glsxtrsetgrouptitle{dar}{DEFINIZIONI AEROPORTUALI}
+\glsxtrsetgrouptitle{dav}{DEFINIZIONI AVIATION}
+
+% Definizione stile personalizzato per i gruppi
+\newglossarystyle{longgroup}{%
+	\setglossarystyle{long}%
+	\renewcommand*{\glsgroupheading}[1]{%
+		&%
+		\multicolumn{1}{c}{%
+			\glsxtrgetgrouptitle{##1}{\glsxtrgrptitle}%
+			\glstreegroupheaderfmt{\glsxtrgrptitle}%
+		}%
+		\cr
+	}%
+}
+
+% Modifica il titolo per l'indice
+\renewcommand*{\acronymtype}{acronym}
+\renewcommand*{\glsglossarymark}[1]{\markboth{Lista delle Abbreviazioni}{Lista delle Abbreviazioni}}
+
+% Mostra il titolo del glossario e aggiungilo all'indice
+\renewcommand*{\glossarysection}[2][]{%
+	\chapter*{Lista delle Abbreviazioni}%
+	\addcontentsline{toc}{chapter}{Lista delle Abbreviazioni}%
+}
+
+\makeglossaries
+
+\title{Esempio minimo per creare un glossario}
+\author{}
+\date{}
+
+\begin{document}
+	\maketitle
+	
+	% Carica le definizioni degli acronimi
+	\input{./abbreviazioni.tex}
+	
+	% Prima occorrenza in un paragrafo
+	Il \gls{sel} è un importante indicatore acustico.......\\
+	% Uso successivo nello stesso paragrafo
+	Il valore del \gls{sel} viene calcolato...\\
+	% Forzare la forma completa
+	Come definito nel glossario, \acrfull{sel} rappresenta...\
+	% Uso solo della forma estesa
+	La \acrlong{sel} è una misura...\\
+	% Uso solo dell'acronimo
+	Il \acrshort{sel} viene misurato in dB.....\\
+	% Reset di un acronimo specifico
+	\glsreset{sel}
+	Il valore di \gls{sel} verrà mostrato di nuovo nella forma completa.\\
+	
+	\glsaddall
+	\printunsrtglossary[type=\acronymtype,style=longgroup,title={Lista delle Abbreviazioni}]
+	
+\end{document}
