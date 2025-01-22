@@ -34,7 +34,7 @@
 
 ## 📝 Descrizione
 
-LaTeX Glossary Editor è un'applicazione desktop professionale progettata per semplificare la gestione dei glossari nei documenti LaTeX. Offre un'interfaccia grafica intuitiva che permette agli utenti di creare, modificare e organizzare definizioni e abbreviazioni in modo efficiente, eliminando la complessità della gestione manuale del codice LaTeX.
+LaTeX Glossary Editor è un'applicazione desktop (cross-platform) progettata per semplificare la gestione dei glossari nei documenti LaTeX. Offre un'interfaccia grafica intuitiva che permette agli utenti di creare, modificare e organizzare definizioni e abbreviazioni in modo efficiente, eliminando la complessità della gestione manuale del codice LaTeX.
 
 ### Perché LaTeX Glossary Editor?
 
