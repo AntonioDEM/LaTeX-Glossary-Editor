@@ -1,4 +1,4 @@
-# LaTeX Glossary Editor - V2.
+# LaTeX Glossary Editor - V2.1.0
 
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
@@ -14,20 +14,41 @@
 
 ![LaTeX](https://img.shields.io/badge/latex-%23008080.svg?style=for-the-badge&logo=latex&logoColor=white)
 ![SQLite](https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white)
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![Tkinter](https://img.shields.io/badge/Tkinter-GUI-orange?style=for-the-badge)
 
+## 📖 Indice
 
+- [Descrizione](#-descrizione)
+- [Caratteristiche](#-caratteristiche)
+- [Requisiti di Sistema](#-requisiti-di-sistema)
+- [Installazione](#-installazione)
+- [Guida all'Uso](#-guida-alluso)
+- [Struttura del Progetto](#-struttura-del-progetto)
+- [Funzionalità Avanzate](#-funzionalità-avanzate)
+- [Risoluzione Problemi](#-risoluzione-problemi)
+- [Contribuire](#-contribuire)
+- [Roadmap](#-roadmap)
+- [Licenza](#-licenza)
+- [Contatti](#-contatti)
 
-Un editor grafico Corss-Platform (MacOSX, Windows, Linux) per la gestione di glossari LaTeX che semplifica la creazione e la manutenzione di definizioni e abbreviazioni in documenti tecnici e scientifici.
+## 📝 Descrizione
 
-## 🎯 Caratteristiche Principali
+LaTeX Glossary Editor è un'applicazione desktop professionale progettata per semplificare la gestione dei glossari nei documenti LaTeX. Offre un'interfaccia grafica intuitiva che permette agli utenti di creare, modificare e organizzare definizioni e abbreviazioni in modo efficiente, eliminando la complessità della gestione manuale del codice LaTeX.
 
-- Interfaccia grafica intuitiva per la gestione delle definizioni
-- Supporto per formattazione matematica LaTeX
-- Organizzazione delle definizioni per categorie
-- Anteprima in tempo reale del codice LaTeX generato
-- Importazione ed esportazione di definizioni da/verso file LaTeX
-- Gestione delle formattazioni (\textbf, \mathbf, ecc.)
-- Cross-platform: funziona su Windows, macOS e Linux
+### Perché LaTeX Glossary Editor?
+
+- **Semplificazione del Workflow**: Elimina la necessità di scrivere manualmente il codice LaTeX per le definizioni del glossario
+- **Gestione Centralizzata**: Organizza tutte le definizioni in un database strutturato
+- **Compatibilità Cross-Platform**: Funziona perfettamente su Windows e macOS
+- **Supporto Completo LaTeX**: Gestisce correttamente la formattazione matematica e i comandi LaTeX
+
+- ### Funzionalità Core
+
+  - **Gestione Progetti**
+    - Creazione e gestione di progetti multipli
+    - Importazione/esportazione da/verso file LaTeX
+    - Backup automatico dei dati
 
 ## 📸 Screenshots
 
@@ -36,6 +57,33 @@ Un editor grafico Corss-Platform (MacOSX, Windows, Linux) per la gestione di glo
 
 ![Database View](assets/database_view.png)
 *Vista del database delle definizioni*
+
+### Interfaccia Utente
+
+- **Editor Visuale**
+  - Campi dedicati per ogni componente della definizione
+  - Formattazione del testo in tempo reale
+  - Anteprima LaTeX istantanea
+
+- **Organizzazione**
+  - Categorizzazione delle definizioni
+  - Creazione di gruppi per definizioni separate se necessario
+  - Sistema di ricerca e filtri
+  - Vista database integrata
+
+### Formattazione
+
+- **Supporto Completo LaTeX**
+  - Modalità matematica integrata
+  - Comandi di formattazione (\textbf, \mathbf, \textit, ecc.)
+  - Gestione automatica delle graffe e degli escape
+
+### Gestione Dati
+
+- **Database SQLite**
+  - Salvataggio automatico
+  - Gestione efficiente delle relazioni
+  - Backup integrato
 
 ## 🚀 Installazione
 
@@ -60,40 +108,105 @@ Al primo avvio crea una cartella GlossaryEditor
 
 ![Database View](assets/docum.png)
 
-Si possono creare delle nuove categorie e le rispettive definizioni oppure importare un file esistente come ad esempio 
+1. ### Primi Passi
 
-abbreviazioni.tex per il quale verrà creato un data base popolato
+   1. **Creazione Nuovo Progetto**
 
-1. Crea una nuova categoria o selezionane una esistente
-2. Inserisci i dettagli della definizione:
-   - Chiave univoca
-   - Nome (con supporto per formattazione)
-   - Prima occorrenza
-   - Testo
-   - Descrizione
-3. Usa i controlli di formattazione per applicare stili (normale, grassetto, corsivo)
-4. Visualizza l'anteprima LaTeX in tempo reale
-5. Salva la definizione nel database
-6. Esporta tutte le definizioni in un file LaTeX
+      - Apri l'applicazione
+      - Seleziona "File > Nuovo Progetto"
+      - Inserisci nome e descrizione
+
+   2. **Gestione Categorie**
+
+      - Crea nuove categorie da "File > Nuova Categoria"
+      - Aggiungi commenti per organizzare meglio le definizioni
+
+   3. **Inserimento Definizioni**
+
+      - Seleziona una categoria
+      - Compila i campi richiesti:
+        - Chiave (identificatore univoco)
+        - Nome (con opzioni di formattazione)
+        - Prima occorrenza
+        - Testo
+        - Descrizione
+        - Gruppo (se necessario)
+
+   4. **Formattazione**
+
+      - Usa i controlli di formattazione per:
+        - Testo in grassetto
+        - Testo in corsivo
+        - Modalità matematica
+        - Prima lettera in grassetto
+      - Esempio del risultato finale
+
+      ```latex
+      \newglossaryentry{cnel}{
+              type=\acronymtype,
+              name={CNEL},
+              first={Community Noise Equivalent Level (CNEL)},
+              text={CNEL},
+              description={Indicatore del livello di rumore medio giornaliero con penalizzazioni per il periodo serale e notturno},
+          group={dac}
+      }
+      ```
+
+   ### Funzionalità Avanzate
+
+   - **Importazione LaTeX**
+     - Supporto per file esistenti
+     - Parsing automatico delle definizioni
+     - Mantenimento della formattazione
+
+   - **Esportazione**
+     - Generazione codice LaTeX
+     - Esportazione selettiva per categoria
+     - Backup del database
 
 ## 📁 Struttura del Progetto
 
 ```
 LaTeX-Glossary-Editor/
-├── abt/
-│   ├── about_window.py    # Finestra delle informazioni
-│   └── info.py           # Configurazioni dell'app
-├── assets/               # Risorse (logo, immagini)
-├── src/
-│   ├── db_manager.py     # Gestione database
-│   ├── glossary_db.py    # Logica del glossario
-│   ├── glossary_os_handler.py  # Gestione cross-platform
-│   ├── latex_parser.py   # Parser LaTeX
-│   └── options_write.py  # Gestione opzioni
-├── LICENSE               # Licenza MIT
-├── glossary_editor.py    # Entry point
-└── readme.md            # Documentazione
+├── abt/                  # Componenti dell'interfaccia About
+│   ├── about_window.py   # Finestra informazioni
+│   └── info.py          # Configurazioni applicazione
+├── assets/              # Risorse statiche
+│   ├── icons/          # Icone dell'interfaccia
+│   └── images/         # Immagini dell'applicazione
+├── src/                 # Codice sorgente principale
+│   ├── db_manager.py    # Gestione database SQLite
+│   ├── glossary_db.py   # Logica del glossario
+│   ├── glossary_os_handler.py  # Gestione multipiattaforma
+│   ├── latex_parser.py  # Parser per file LaTeX
+│   ├── options_write.py # Gestione opzioni di scrittura
+│   └── project_manager.py # Gestione progetti
+├── tests/              # Suite di test
+├── docs/               # Documentazione
+├── LICENSE             # Licenza MIT
+├── README.md          # Questo file
+├── requirements.txt   # Dipendenze Python
+└── glossary_editor.py # Entry point applicazione
 ```
+
+## ❗ Risoluzione Problemi
+
+### Problemi Comuni
+
+1. **Database non accessibile**
+   - Verifica i permessi della directory
+   - Controlla il path del database
+   - Riavvia l'applicazione
+
+2. **Errori di Importazione LaTeX**
+   - Verifica la sintassi del file
+   - Controlla la codifica del file (UTF-8)
+   - Usa l'opzione di debug per maggiori dettagli
+
+3. **Problemi di Formattazione**
+   - Pulisci la cache dell'applicazione
+   - Verifica la sintassi LaTeX
+   - Usa l'anteprima per controllare il risultato
 
 ## 🤝 Contributi
 
