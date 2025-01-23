@@ -17,6 +17,10 @@
 ![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
 ![Tkinter](https://img.shields.io/badge/Tkinter-GUI-orange?style=for-the-badge)
 
+### ---TEMPORANEAMENTE CI SONO ALCUNI ERRORI SOSTANZIALI----
+
+### ---IN ATTESA DELL'UPDATE NON SCARICATE I SORGENTI E IL DMG--
+
 ## 📖 Indice
 
 - [Descrizione](#-descrizione)
