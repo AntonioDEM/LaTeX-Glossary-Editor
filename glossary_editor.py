@@ -31,7 +31,8 @@ class DatabaseViewer(ttk.Frame):
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Crea il Treeview
-        columns = ('ID', 'Categoria', 'Chiave', 'Tipo', 'Nome', 'First', 'Testo', 'Descrizione', 'Commento')
+        columns = ('ID', 'Categoria', 'Chiave', 'Tipo', 'Nome', 'First', 'Testo', 'Descrizione', 'Gruppo', 'Commento')
+        self.tree = ttk.Treeview(main_frame, columns=columns, show='headings')
         self.tree = ttk.Treeview(main_frame, columns=columns, show='headings')
         
         # Configura le colonne
@@ -44,6 +45,7 @@ class DatabaseViewer(ttk.Frame):
             'First': 200,
             'Testo': 150,
             'Descrizione': 300,
+            'Gruppo':20,
             'Commento': 150
         }
         
@@ -88,7 +90,7 @@ class DatabaseViewer(ttk.Frame):
             with sqlite3.connect(db_path) as conn:  # Usiamo il path corretto
                 cursor = conn.cursor()
                 cursor.execute('''
-                    SELECT e.id, c.name, e.key, e.type, e.name, e.first, e.text, e.description, c.comment
+                    SELECT e.id, c.name, e.key, e.type, e.name, e.first, e.text, e.description, e.group_name, c.comment
                     FROM entries e
                     JOIN categories c ON e.category_id = c.id
                     ORDER BY c.name, e.key
@@ -108,7 +110,8 @@ class DatabaseViewer(ttk.Frame):
                         row[5],              # First
                         row[6],              # Testo
                         row[7],              # Descrizione
-                        row[8] or ""         # Commento
+                        row[8],              # Group name (nuovo)
+                        row[9] or ""         # Commento
                     )
                     self.tree.insert('', 'end', values=values)
                     
@@ -125,13 +128,14 @@ class GlossaryEditor(tk.Tk):
         self.os_handler = GlossaryOSHandler()
         self.os_handler.ensure_directories_exist()
         
-        self.title("LaTeX Glossary Editor - V2.0.0")
+        self.title("LaTeX Glossary Editor - V2.1.1")
         self.geometry("1000x800")
 
         # Inizializza il project manager
        
         self.project_manager = ProjectManager()
         self.os_handler = GlossaryOSHandler()
+        self.os_handler.ensure_directories_exist()
         self.db_manager = DatabaseManager()
         self.db_manager.connect()
 
@@ -184,6 +188,19 @@ class GlossaryEditor(tk.Tk):
 
          # Se non c'è nessun progetto aperto, mostra il dialog dei progetti
         self.show_project_dialog()
+    
+    def open_data_folder(self):
+        """Apre la cartella dei dati dell'applicazione"""
+        import os
+        import subprocess
+        path = self.os_handler.get_base_directory()
+        if os.name == 'nt':  # Windows
+            os.startfile(str(path))
+        elif os.name == 'posix':  # macOS e Linux
+            if os.system('which xdg-open') == 0:  # Linux
+                subprocess.run(['xdg-open', str(path)])
+            else:  # macOS
+                subprocess.run(['open', str(path)])
   
     def create_menu(self):
         menubar = tk.Menu(self)
@@ -193,11 +210,13 @@ class GlossaryEditor(tk.Tk):
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Gestione Progetti", command=self.show_project_dialog)  # Aggiunto
         file_menu.add_separator()  # Aggiunto
-        file_menu.add_command(label="Importa da LaTeX", command=self.import_latex_file)
+        #file_menu.add_command(label="Importa da LaTeX", command=self.import_latex_file)
         file_menu.add_command(label="Esporta in LaTeX", command=self.export_latex_file)
         file_menu.add_separator()
         file_menu.add_command(label="Nuova Categoria", command=self.new_category)
         file_menu.add_command(label="Elimina Categoria", command=self.delete_category)  # Aggiunto qui
+        file_menu.add_separator()
+        file_menu.add_command(label="Apri Cartella Dati", command=self.open_data_folder)
         file_menu.add_separator()
         file_menu.add_command(label="Esci", command=self.quit)
 
@@ -283,7 +302,7 @@ class GlossaryEditor(tk.Tk):
         entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         self.fields[field_name] = entry
-        
+
         if has_format:
             # Crea widget di formattazione
             format_widget = FormatWidgets(input_frame, field_name)
@@ -332,6 +351,13 @@ class GlossaryEditor(tk.Tk):
         self.fields['name'] = self.create_input_field(left_frame, "Nome:", 'name', has_format=True)
         self.fields['first'] = self.create_input_field(left_frame, "Prima occorrenza:", 'first', has_format=True)
         self.fields['text'] = self.create_input_field(left_frame, "Testo:", 'text', has_format=True)
+
+        # Aggiungi il campo per il gruppo qui, dopo che left_frame è stato creato
+        group_frame = ttk.Frame(left_frame)
+        group_frame.pack(fill=tk.X, pady=2)
+        ttk.Label(group_frame, text="Gruppo:").pack(side=tk.LEFT)
+        self.fields['group'] = ttk.Entry(group_frame)
+        self.fields['group'].pack(side=tk.LEFT, fill=tk.X, expand=False, padx=(5, 0))
         
         # Frame per descrizione e anteprima
         desc_preview_frame = ttk.Frame(left_frame)
@@ -563,6 +589,16 @@ class GlossaryEditor(tk.Tk):
         
         return result
 
+    def clean_group_value(self, group_text):
+        """Pulisce il formato LaTeX dal valore del gruppo"""
+        if group_text:
+            # Rimuove \group{} e mantiene solo il contenuto
+            match = re.search(r'\\group{(.*?)}', group_text)
+            if match:
+                return match.group(1)
+        return group_text
+
+
     def on_entry_select(self, event):
         """Gestisce la selezione di una definizione dalla lista"""
         selection = self.entries_list.curselection()
@@ -583,7 +619,8 @@ class GlossaryEditor(tk.Tk):
                         fo_name.is_math_mode as name_math,
                         fo_text.is_math_mode as text_math,
                         fo_first.is_math_mode as first_math,
-                        fo_first.first_letter_bold as first_bold
+                        fo_first.first_letter_bold as first_bold,
+                        e.group_name 
                     FROM entries e
                     JOIN categories c ON e.category_id = c.id
                     LEFT JOIN formatting_options fo_name ON e.id = fo_name.entry_id AND fo_name.field_name = 'name'
@@ -601,8 +638,10 @@ class GlossaryEditor(tk.Tk):
                         'first': entry[5],
                         'text': entry[6],
                         'description': entry[7],
-                        'type': entry[3]
+                        'type': entry[3],
+                        'group': entry[-1]
                     }
+                    
                     
                     # Pulisci i campi per la visualizzazione nell'editor
                     self.clear_fields()
@@ -612,7 +651,11 @@ class GlossaryEditor(tk.Tk):
                     self.fields['name'].insert(0, self.clean_latex_commands(entry[4]))
                     self.fields['first'].insert(0, self.clean_latex_commands(entry[5]))
                     self.fields['text'].insert(0, self.clean_latex_commands(entry[6])) # Qui è importante
-                    
+
+                    # Pulisci il valore del gruppo prima di mostrarlo
+                    group_value = self.clean_group_value(entry[-1])
+                    self.fields['group'].insert(0, group_value if group_value else "")
+
                     if entry[7]:  # descrizione
                         self.fields['description'].delete('1.0', tk.END)
                         self.fields['description'].insert('1.0', entry[7])
@@ -638,12 +681,15 @@ class GlossaryEditor(tk.Tk):
                     'first': self.fields['first'].get().strip(),
                     'text': self.fields['text'].get().strip(),
                     'description': self.fields['description'].get('1.0', tk.END).strip(),
+                    'group': self.fields['group'].get().strip(),
                     'type': self.type_var.get().strip()
                 }
 
             if not values['key']:  # Se non c'è chiave, non generare l'anteprima
                 self.latex_preview.delete('1.0', tk.END)
                 return
+            # Ottieni il valore del gruppo
+            group_value = self.fields['group'].get().strip() if 'group' in self.fields else ""
 
             # Genera il codice LaTeX
             latex_code = f"""\\newglossaryentry{{{values['key']}}}{{
@@ -651,8 +697,13 @@ class GlossaryEditor(tk.Tk):
         name={{{values['name']}}},
         first={{{values['first']}}},
         text={{{values['text']}}},
-        description={{{values['description']}}}
-    }}"""
+        description={{{values['description']}}}"""
+        # Aggiungi il gruppo se presente
+            if group_value:
+                latex_code += f",\n    group={{{group_value}}}"
+
+            # Chiudi la definizione
+            latex_code += "\n}"
             
             # Aggiorna il campo di anteprima
             self.latex_preview.delete('1.0', tk.END)
@@ -710,6 +761,10 @@ class GlossaryEditor(tk.Tk):
                 'text': (self.text_format, self.fields['text'].get().strip()),
                 'first': (getattr(self, 'first_format', None), self.fields['first'].get().strip())
             }
+            # Ottieni il valore del gruppo
+            group_value = self.fields['group'].get().strip()
+            if group_value:
+                group_value = f"\\group{{{group_value}}}"
 
             # Formatta i testi
             formatted_texts = {}
@@ -731,8 +786,8 @@ class GlossaryEditor(tk.Tk):
             # Salva l'entry
             cursor = self.db_manager.execute('''
                 INSERT OR REPLACE INTO entries 
-                (category_id, key, type, name, first, text, description)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (category_id, key, type, name, first, text, description, group_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 category_id,
                 key,
@@ -740,7 +795,8 @@ class GlossaryEditor(tk.Tk):
                 formatted_texts['name'],
                 formatted_texts['first'],
                 formatted_texts['text'],
-                description
+                description,
+                group_value
             ))
 
             entry_id = cursor.lastrowid
