@@ -101,7 +101,8 @@ def parse_glossary_entry(content, start_pos):
             'name': extract_field_content(main_content, 'name'),
             'first': extract_field_content(main_content, 'first'),
             'text': extract_field_content(main_content, 'text'),
-            'description': extract_field_content(main_content, 'description')
+            'description': extract_field_content(main_content, 'description'),
+            'group': extract_field_content(main_content, 'group')
         }
         
         # Verifica se è in modalità matematica

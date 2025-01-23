@@ -38,7 +38,7 @@ class GlossaryDatabase:
             # Crea tabella entries
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS entries (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    id INTEGER PRIMARY KEY,
                     category_id INTEGER,
                     key TEXT NOT NULL,
                     type TEXT NOT NULL DEFAULT '\\acronymtype',
@@ -51,9 +51,9 @@ class GlossaryDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (category_id) REFERENCES categories(id),
-                    UNIQUE(category_id, key)
-                )
-            ''')
+                    UNIQUE(category_id, LOWER(key))
+                )''')
+                
             # Controlla se la colonna group_name esiste
             cursor.execute("PRAGMA table_info(entries)")
             columns = [column[1] for column in cursor.fetchall()]

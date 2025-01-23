@@ -727,7 +727,7 @@ class GlossaryEditor(tk.Tk):
 
         print("\n=== Debug: Salvataggio Entry ===")
         print(f"Categoria: {category}")
-        print(f"Database path: {self.db.db_path}")  # Debug
+        print(f"Database path: {self.db.db_path}")
 
         key = self.fields['key'].get().strip()
         if not key:
@@ -735,7 +735,6 @@ class GlossaryEditor(tk.Tk):
             return
 
         try:
-            # Importante: aggiorniamo il db_manager per usare lo stesso database
             self.db_manager = DatabaseManager(self.db.db_path)
             self.db_manager.connect()
             self.db_manager.begin_transaction()
@@ -747,13 +746,19 @@ class GlossaryEditor(tk.Tk):
             result = cursor.fetchone()
             
             if not result:
-                print(f"Errore: categoria '{category}' non trovata nel database: {self.db.db_path}")  # Debug
+                print(f"Errore: categoria '{category}' non trovata nel database: {self.db.db_path}")
                 messagebox.showerror("Errore", f"Categoria '{category}' non trovata nel database")
                 self.db_manager.rollback()
                 return
                 
             category_id = result[0]
-            print(f"ID Categoria trovato: {category_id}")  # Debug
+            print(f"ID Categoria trovato: {category_id}")
+
+            # Prima cerca ed elimina l'entry esistente (case insensitive)
+            self.db_manager.execute('''
+                DELETE FROM entries 
+                WHERE category_id = ? AND LOWER(key) = LOWER(?)
+            ''', (category_id, key))
 
             # Ottieni i widget di formattazione e i loro valori
             widgets_info = {
@@ -761,6 +766,7 @@ class GlossaryEditor(tk.Tk):
                 'text': (self.text_format, self.fields['text'].get().strip()),
                 'first': (getattr(self, 'first_format', None), self.fields['first'].get().strip())
             }
+            
             # Ottieni il valore del gruppo
             group_value = self.fields['group'].get().strip()
             if group_value:
@@ -771,37 +777,70 @@ class GlossaryEditor(tk.Tk):
             for field, (widget, text) in widgets_info.items():
                 if widget:
                     values = widget.get_values()
-                    formatted_texts[field] = FormatManager.format_text(
-                        text,
-                        values['format_type'],
-                        values['is_math_mode'],
-                        values.get('first_letter_bold', False)
-                    )
+                    if field == 'first':
+                        formatted_texts[field] = FormatManager.format_text(
+                            text,
+                            values['format_type'],
+                            False,  # Forza is_math_mode a False per 'first'
+                            values.get('first_letter_bold', False)
+                        )
+                    elif values['is_math_mode']:
+                        formatted_texts[field] = f"${text}$"
+                    else:
+                        formatted_texts[field] = FormatManager.format_text(
+                            text,
+                            values['format_type'],
+                            values['is_math_mode'],
+                            values.get('first_letter_bold', False)
+                        )
                     print(f"Formattazione {field}: {text} -> {formatted_texts[field]}")
                 else:
                     formatted_texts[field] = text
 
             description = self.fields['description'].get('1.0', tk.END).strip()
 
-            # Salva l'entry
+            # Salva la nuova entry
+            # Ottieni l'ID esistente se presente
             cursor = self.db_manager.execute('''
-                INSERT OR REPLACE INTO entries 
-                (category_id, key, type, name, first, text, description, group_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                category_id,
-                key,
-                '\\acronymtype',
-                formatted_texts['name'],
-                formatted_texts['first'],
-                formatted_texts['text'],
-                description,
-                group_value
-            ))
+                SELECT id FROM entries 
+                WHERE category_id = ? AND LOWER(key) = LOWER(?)
+            ''', (category_id, key))
+            result = cursor.fetchone()
+            entry_id = result[0] if result else None
 
-            entry_id = cursor.lastrowid
+            # Usa l'ID esistente o lascia che il database ne assegni uno nuovo
+            if entry_id:
+                cursor = self.db_manager.execute('''
+                    UPDATE entries 
+                    SET name = ?, first = ?, text = ?, description = ?, group_name = ?, type = ?
+                    WHERE id = ?
+                ''', (
+                    formatted_texts['name'],
+                    formatted_texts['first'],
+                    formatted_texts['text'],
+                    description,
+                    group_value,
+                    '\\acronymtype',
+                    entry_id
+                ))
+            else:
+                cursor = self.db_manager.execute('''
+                    INSERT INTO entries 
+                    (category_id, key, type, name, first, text, description, group_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    category_id,
+                    key,
+                    '\\acronymtype',
+                    formatted_texts['name'],
+                    formatted_texts['first'],
+                    formatted_texts['text'],
+                    description,
+                    group_value
+                ))
+                entry_id = cursor.lastrowid
 
-            # Salva le opzioni di formattazione
+            # Aggiorna le opzioni di formattazione
             for field, (widget, _) in widgets_info.items():
                 if widget:
                     values = widget.get_values()
