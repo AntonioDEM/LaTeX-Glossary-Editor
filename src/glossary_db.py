@@ -1,7 +1,26 @@
 import sqlite3
+import os
+import re
 from datetime import datetime
 from .latex_parser import parse_glossary_entry  # Aggiunto il punto per l'importazione relativa
 from .glossary_os_handler import GlossaryOSHandler
+
+
+#costante di default per import e export
+DEFAULT_GLOSSARY_ENTRY = '''%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% DEFINIZIONI Generale
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Inserire definizioni di default
+
+\\newglossaryentry{}{
+        type=\\acronymtype,
+        name={\\textbf{}},
+        first={},
+        text={},
+        description={},
+        group={}
+    }
+'''
 
 class GlossaryDatabase:
     def __init__(self, db_path=None):
@@ -9,36 +28,71 @@ class GlossaryDatabase:
         self.os_handler.ensure_directories_exist()
         self.db_path = db_path or self.os_handler.get_database_path()
         self._create_database()
-    
+        # Aggiungi qui la chiamata per correggere gli ID NULL
+        self.fix_null_category_ids()
+
+    def fix_null_category_ids(self):
+        """Controlla e corregge eventuali category_id NULL, assegna un category_id se non presente"""
+        print("\n=== Controllo category_id NULL ===")
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Trova tutte le categorie con category_id NULL
+                cursor.execute('''
+                    SELECT id, name 
+                    FROM categories 
+                    WHERE category_id IS NULL
+                ''')
+                
+                null_categories = cursor.fetchall()
+                print(f"Trovate {len(null_categories)} categorie senza ID")
+                
+                # Per ogni categoria senza ID
+                for cat_id, cat_name in null_categories:
+                    # Genera un nuovo category_id
+                    new_category_id = f"CAT_{os.urandom(4).hex()}"
+                    
+                    # Aggiorna la categoria
+                    cursor.execute('''
+                        UPDATE categories 
+                        SET category_id = ? 
+                        WHERE id = ?
+                    ''', (new_category_id, cat_id))
+                    
+                    print(f"Aggiornata categoria '{cat_name}' con nuovo ID: {new_category_id}")
+                
+                conn.commit()
+                print("Aggiornamento completato")
+                return True
+                
+        except sqlite3.Error as e:
+            print(f"Errore durante la correzione degli ID: {str(e)}")
+            return False
+ 
     def _create_database(self):
-        """Crea o aggiorna lo schema del database"""
-        print("Creo/verifico il database...")
+        print("Creazione database...")
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            
-            # Crea tabella categorie
+
+            # Tabella categories
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS categories (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT UNIQUE NOT NULL,
-                    comment TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    category_id TEXT UNIQUE,
+                    name TEXT NOT NULL,
+                    comment TEXT,  
+                    group_name TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(name COLLATE NOCASE)
                 )
             ''')
-            
-            # Controlla se la colonna comment esiste
-            cursor.execute("PRAGMA table_info(categories)")
-            columns = [column[1] for column in cursor.fetchall()]
-            
-            # Aggiungi la colonna comment se non esiste
-            if 'comment' not in columns:
-                print("Aggiorno la struttura del database: aggiungo colonna comment...")
-                cursor.execute('ALTER TABLE categories ADD COLUMN comment TEXT')
-            
-            # Crea tabella entries
+
+            # Tabella entries 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS entries (
-                    id INTEGER PRIMARY KEY,
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    definition_id TEXT UNIQUE,
                     category_id INTEGER,
                     key TEXT NOT NULL,
                     type TEXT NOT NULL DEFAULT '\\acronymtype',
@@ -46,24 +100,15 @@ class GlossaryDatabase:
                     first TEXT NOT NULL,
                     text TEXT NOT NULL,
                     description TEXT,
-                    group_name TEXT,
                     is_math BOOLEAN DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (category_id) REFERENCES categories(id),
-                    UNIQUE(category_id, LOWER(key))
-                )''')
-                
-            # Controlla se la colonna group_name esiste
-            cursor.execute("PRAGMA table_info(entries)")
-            columns = [column[1] for column in cursor.fetchall()]
-            
-            # Aggiungi la colonna group_name se non esiste
-            if 'group_name' not in columns:
-                print("Aggiorno la struttura del database: aggiungo colonna group_name...")
-                cursor.execute('ALTER TABLE entries ADD COLUMN group_name TEXT')
+                    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
+                    UNIQUE(category_id, key COLLATE NOCASE)
+                )
+            ''')
 
-            # Crea tabella formatting_options
+            # Tabella formatting_options
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS formatting_options (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,17 +116,23 @@ class GlossaryDatabase:
                     field_name TEXT,
                     format_type TEXT,
                     is_math_mode BOOLEAN DEFAULT 0,
-                    first_letter_bold BOOLEAN DEFAULT 0,
+                    first_letter_bold BOOLEAN DEFAULT 0,     
                     FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE,
                     UNIQUE(entry_id, field_name)
                 )
             ''')
-            
-            # Inserisce categoria "Generale" di default
-            cursor.execute('INSERT OR IGNORE INTO categories (name) VALUES ("Generale")')
-            
+
+            # Categoria default con ID predefinito
+            generale_id = "CAT_GEN_001"
+            cursor.execute('''
+                INSERT OR IGNORE INTO categories 
+                (name, category_id) 
+                VALUES ("Generale", ?)
+            ''', (generale_id,))
             conn.commit()
-            print("Database creato/verificato correttamente")
+            print("Database creato correttamente")
+            # Verifica e correggi eventuali category_id NULL
+            self.fix_null_category_ids()
     
     def add_category(self, name, comment=None):
         """Aggiunge una nuova categoria con commento opzionale"""
@@ -164,6 +215,39 @@ class GlossaryDatabase:
             cursor = conn.cursor()
             cursor.execute('SELECT name FROM categories ORDER BY name')
             return [row[0] for row in cursor.fetchall()]
+    
+    def cleanup_group_names(self):
+        """Pulisce la colonna group_name da \group{}"""
+        print("\n=== Pulizia group_name nel database ===")
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                
+                # Trova tutte le categorie con \group{}
+                cursor.execute('SELECT id, name, group_name FROM categories WHERE group_name LIKE "%\\group{%"')
+                groups_to_clean = cursor.fetchall()
+                
+                print(f"Trovate {len(groups_to_clean)} categorie da pulire")
+                
+                for cat_id, cat_name, group_name in groups_to_clean:
+                    # Estrai il valore interno
+                    match = re.search(r'\\group{(.*?)}', group_name)
+                    if match:
+                        clean_value = match.group(1)
+                        cursor.execute('''
+                            UPDATE categories 
+                            SET group_name = ? 
+                            WHERE id = ?
+                        ''', (clean_value, cat_id))
+                        print(f"Categoria '{cat_name}': {group_name} -> {clean_value}")
+                
+                conn.commit()
+                print("Pulizia completata")
+                return True
+            
+        except sqlite3.Error as e:
+            print(f"Errore durante la pulizia: {str(e)}")
+            return False
     
     def add_entry(self, category_name, entry_data):
         """Aggiunge o aggiorna una definizione"""
@@ -283,12 +367,25 @@ class GlossaryDatabase:
             cursor = conn.cursor()
             content = ""
             
+            # Prima controlla se la categoria Generale ha entries
+            cursor.execute('''
+                SELECT EXISTS(
+                    SELECT 1 FROM entries e 
+                    JOIN categories c ON e.category_id = c.id 
+                    WHERE c.name = 'Generale'
+                )
+            ''')
+            has_generale_entries = cursor.fetchone()[0]
+            
+            # Ottieni tutte le categorie con i loro commenti
             cursor.execute('''
                 SELECT c.name, c.comment 
                 FROM categories c
-                WHERE c.name != "Generale" 
-                ORDER BY c.name
-            ''')
+                WHERE (c.name != 'Generale' OR (c.name = 'Generale' AND ?))
+                ORDER BY 
+                    CASE WHEN c.name = 'Generale' THEN 0 ELSE 1 END,
+                    c.name
+            ''', (has_generale_entries,))
             
             for category_name, comment in cursor.fetchall():
                 content += "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n"
@@ -297,51 +394,54 @@ class GlossaryDatabase:
                 
                 if comment and comment.strip():
                     content += f"% {comment}\n"
-                
+                    
                 content += "\n"
                 
                 cursor.execute('''
-                    SELECT e.key, e.type, e.name, e.first, e.text, e.description, e.group_name
+                    SELECT e.key, e.type, e.name, e.first, e.text, e.description, c.group_name
                     FROM entries e
                     JOIN categories c ON e.category_id = c.id
                     WHERE c.name = ?
                     ORDER BY e.key
                 ''', (category_name,))
                 
-                for entry in cursor.fetchall():
+                rows = cursor.fetchall()
+                for entry in rows:
+                    # Definisci group_text qui, prima di qualsiasi logica condizionale
+                    group_text = ""
+                    
                     key = entry[0]
                     if key.startswith('\\newglossaryentry{'):
                         key = key[len('\\newglossaryentry{'):-1]
-                    if entry[6]:  # Se c'è un gruppo
-                        # Estrai il valore del gruppo rimuovendo \group{}
-                        group_value = entry[6]
-                        if group_value.startswith('\\group{') and group_value.endswith('}'):
-                            group_value = group_value[7:-1]  # Rimuove \group{ e }
-                        content += f"""\\newglossaryentry{{{key}}}{{
+                    
+                    # Gestione separata del gruppo
+                    group_name = entry[6]
+                    if group_name is not None:
+                        group_name = group_name.strip()
+                        if group_name:
+                            # Cerca pattern \group{...}
+                            match = re.search(r'\\group{(.*?)}', group_name)
+                            if match:
+                                # Usa il contenuto di \group{...}
+                                group_text = f",\n    group={{{match.group(1)}}}"
+                            else:
+                                # Usa il valore così com'è
+                                group_text = f",\n    group={{{group_name}}}"
+                    # Genera l'entry LaTeX
+                    content += f"""\\newglossaryentry{{{key}}}{{
         type={entry[1]},
         name={{{entry[2]}}},
         first={{{entry[3]}}},
         text={{{entry[4]}}},
-        description={{{entry[5]}}},
-        group={{{group_value}}}
-    }}\n\n"""
-                    else:  # Se non c'è gruppo
-                        content += f"""\\newglossaryentry{{{key}}}{{
-        type={entry[1]},
-        name={{{entry[2]}}},
-        first={{{entry[3]}}},
-        text={{{entry[4]}}},
-        description={{{entry[5]}}}
+        description={{{entry[5]}}}{group_text}
     }}\n\n"""
                 
             return content
 
     def import_from_latex(self, content):
-        """Importa definizioni da contenuto LaTeX"""
         print("Inizio importazione...")
         sections = content.split("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%")
-        current_category = "Generale"
-        category_comment = None
+        current_category = None
         
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -355,50 +455,58 @@ class GlossaryDatabase:
                 for line in lines:
                     if "DEFINIZIONI" in line:
                         current_category = line.replace('%', '').replace('DEFINIZIONI', '').strip()
+                        category_id = f"CAT_{os.urandom(4).hex()}"
                         print(f"\nProcesso categoria: {current_category}")
                         
+                        # Gestione commento
                         if i + 1 < len(sections):
                             next_lines = sections[i+1].strip().split('\n')
                             if next_lines and next_lines[0].strip().startswith('%'):
                                 category_comment = next_lines[0].strip()[1:].strip()
-                                print(f"Commento trovato per {current_category}: {category_comment}")
+                                print(f"Commento: {category_comment}")
                         
-                        cursor.execute('SELECT id FROM categories WHERE name = ?', (current_category,))
-                        exists = cursor.fetchone()
-                        
-                        if exists:
                             cursor.execute('''
-                                UPDATE categories 
-                                SET comment = ?
-                                WHERE name = ?
-                            ''', (category_comment, current_category))
-                        else:
-                            cursor.execute('''
-                                INSERT INTO categories (name, comment) 
-                                VALUES (?, ?)
-                            ''', (current_category, category_comment))
-                        
-                        category_comment = None
+                                INSERT OR REPLACE INTO categories 
+                                (name, category_id, comment)
+                                VALUES (?, ?, ?)
+                            ''', (current_category, category_id, category_comment))
                         break
                 
                 if not lines[0].strip().startswith('% DEFINIZIONI'):
                     cursor.execute('SELECT id FROM categories WHERE name = ?', (current_category,))
                     category_id = cursor.fetchone()[0]
+                    group_value = None  
                     
                     pos = 0
                     while True:
                         pos = section.find('\\newglossaryentry', pos)
                         if pos == -1:
                             break
-                        
+                            
                         entry = parse_glossary_entry(section, pos)
                         if entry:
                             try:
+                                # Gestione Gruppo
+                                if 'group' in entry:
+                                    group_value = entry['group']
+                                    # Rimuovi eventuali \group{} esistenti
+                                    match = re.search(r'\\group{(.*?)}', group_value)
+                                    if match:
+                                        group_value = match.group(1)
+                                    cursor.execute('''
+                                        UPDATE categories 
+                                        SET group_name = ?
+                                        WHERE id = ?
+                                    ''', (group_value, category_id))
+
+                                definition_id = f"DEF_{os.urandom(4).hex()}"
                                 cursor.execute('''
-                                    INSERT OR REPLACE INTO entries 
-                                    (category_id, key, type, name, first, text, description, group_name, is_math)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    INSERT INTO entries (
+                                        definition_id, category_id, key, type, name,
+                                        first, text, description, is_math
+                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ''', (
+                                    definition_id,
                                     category_id,
                                     entry['key'],
                                     entry['type'] or '\\acronymtype',
@@ -406,16 +514,58 @@ class GlossaryDatabase:
                                     entry['first'],
                                     entry['text'],
                                     entry['description'],
-                                    entry.get('group', ''),
-                                    entry['is_math']
+                                    entry.get('is_math', False)
                                 ))
-                                print(f"Entry {entry['key']} salvata con successo")
+                                entry_id = cursor.lastrowid
+
+                                # Formatting Options
+                                format_fields = ['name', 'first', 'text']
+                                for field in format_fields:
+                                    value = entry[field]
+                                    
+                                    # Controlla prima \textbackslash
+                                    has_textbackslash = '\\textbackslash' in value
+                                    if has_textbackslash:
+                                        format_type = '\\textbackslash'
+                                        is_math_mode = True  # \textbackslash implica modalità matematica
+                                    else:
+                                        is_math = value.startswith('$') and value.endswith('$')
+                                        has_textbf = '\\textbf{' in value
+                                        has_textit = '\\textit{' in value
+                                        has_mathbf = '\\mathbf{' in value
+                                        has_mathit = '\\mathit{' in value
+                                        
+                                        # Aggiungi controllo per first_letter_bold
+                                        first_letter_bold = False
+                                        if field == 'first':
+                                            words = value.split()
+                                            if any(word.startswith('\\textbf{') and '}' in word for word in words):
+                                                first_letter_bold = True
+
+                                        format_type = 'Normale'
+                                        if has_textbf: format_type = '\\textbf{}'
+                                        elif has_textit: format_type = '\\textit{}'
+                                        elif has_mathbf: format_type = '\\mathbf{}'
+                                        elif has_mathit: format_type = '\\mathit{}'
+
+                                    cursor.execute('''
+                                        INSERT INTO formatting_options
+                                        (entry_id, field_name, format_type, is_math_mode, first_letter_bold)
+                                        VALUES (?, ?, ?, ?, ?)
+                                    ''', (
+                                        entry_id, 
+                                        field,
+                                        format_type,
+                                        is_math_mode if has_textbackslash else is_math,
+                                        first_letter_bold
+                                    ))
+                                print(f"Entry {entry['key']} salvata")
                             except Exception as e:
-                                print(f"Errore nel salvare {entry['key']}: {e}")
+                                print(f"Errore: {entry['key']} - {str(e)}")
                         pos += 1
-                    
+                        
             conn.commit()
-            print("Importazione completata")
+        print("Importazione completata")
             
     
     

@@ -96,7 +96,6 @@ class ProjectManager:
             print(f"Errore nella creazione del progetto: {e}")
             raise
 
-
     def create_project(self, name, description=""):
         """Crea un nuovo progetto vuoto"""
         try:
@@ -111,7 +110,33 @@ class ProjectManager:
                 ''', (name, description, database_name))
                 conn.commit()
                 
-                return self.os_handler.get_database_path(database_name)
+                # Inizializza il database del progetto
+                db_path = self.os_handler.get_database_path(database_name)
+                with sqlite3.connect(db_path) as project_conn:
+                    project_cursor = project_conn.cursor()
+                    
+                    # Crea le tabelle necessarie
+                    project_cursor.execute('''
+                        CREATE TABLE IF NOT EXISTS categories (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            category_id TEXT UNIQUE,
+                            name TEXT NOT NULL,
+                            comment TEXT,
+                            group_name TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            UNIQUE(name COLLATE NOCASE)
+                        )
+                    ''')
+                    
+                    # Inserisci la categoria "Generale" di default
+                    project_cursor.execute('''
+                        INSERT INTO categories (name, category_id)
+                        VALUES ("Generale", "CAT_GEN_001")
+                    ''')
+                    
+                    project_conn.commit()
+                
+                return db_path
                 
         except sqlite3.IntegrityError:
             raise ValueError(f"Un progetto con il nome '{name}' esiste già")
@@ -142,8 +167,7 @@ class ProjectManager:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM projects WHERE name = ?', (name,))
             return cursor.fetchone()
-    
-       
+        
     def update_project(self, name, description=None, latex_file_path=None):
         """Aggiorna i dettagli di un progetto esistente"""
         try:

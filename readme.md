@@ -1,25 +1,10 @@
-# LaTeX Glossary Editor - V2.1.0
+# ![glstex](/Users/tony/Documents/compprogram/compile/LGE/assets/glstex.png)LaTeX Glossary Editor - V2.3.0
 
-![License](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
-![Status](https://img.shields.io/badge/status-stable-green.svg)
-![Last Commit](https://img.shields.io/badge/last_commit-January_2025-green.svg)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)![Status](https://img.shields.io/badge/status-stable-green.svg)![Last Commit](https://img.shields.io/badge/last_commit-January_2025-green.svg)
 
-### Supported Operating Systems
+### Supported Operating Systems : ![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)![macOS](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=macos&logoColor=F0F0F0)
 
-![Windows](https://img.shields.io/badge/Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white)
-![macOS](https://img.shields.io/badge/mac%20os-000000?style=for-the-badge&logo=macos&logoColor=F0F0F0)
-
-### Technologies
-
-![LaTeX](https://img.shields.io/badge/latex-%23008080.svg?style=for-the-badge&logo=latex&logoColor=white)
-![SQLite](https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white)
-![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
-![Tkinter](https://img.shields.io/badge/Tkinter-GUI-orange?style=for-the-badge)
-
-### ---TEMPORANEAMENTE CI SONO ALCUNI ERRORI SOSTANZIALI----
-
-### ---IN ATTESA DELL'UPDATE NON SCARICATE I SORGENTI E IL DMG--
+### Technologies: ![LaTeX](https://img.shields.io/badge/latex-%23008080.svg?style=for-the-badge&logo=latex&logoColor=white)![SQLite](https://img.shields.io/badge/sqlite-%2307405e.svg?style=for-the-badge&logo=sqlite&logoColor=white)![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)![Tkinter](https://img.shields.io/badge/Tkinter-GUI-orange?style=for-the-badge)
 
 ## 📖 Indice
 
@@ -79,7 +64,9 @@ LaTeX Glossary Editor è un'applicazione desktop (cross-platform) progettata per
 
 - **Supporto Completo LaTeX**
   - Modalità matematica integrata
-  - Comandi di formattazione (\textbf, \mathbf, \textit, ecc.)
+  - Comandi di formattazione 
+    - modalità testo : Normale, \textbf{}, \texit{} 
+    - modalità matematica : Normale, \mathbf{}, \mathit{},\textbackslash)
   - Gestione automatica delle graffe e degli escape
 
 ### Gestione Dati
@@ -122,11 +109,13 @@ Al primo avvio crea una cartella GlossaryEditor
 
    2. **Gestione Categorie**
 
-      - Crea nuove categorie da "File > Nuova Categoria"
+      - Crea nuove categorie da "File > Nuova Categoria" (MATEMATICA, FISICA, CHIMICA.....)
       - Aggiungi commenti per organizzare meglio le definizioni
+      - Aggiungi Gruppo (se necessario)
+        - l'opzione gruppo consente appunto di suddividere il glossario in gruppi di definizioni, ad esempio: math, fis, chim.....
 
    3. **Inserimento Definizioni**
-
+   
       - Seleziona una categoria
       - Compila i campi richiesti:
         - Chiave (identificatore univoco)
@@ -134,35 +123,34 @@ Al primo avvio crea una cartella GlossaryEditor
         - Prima occorrenza
         - Testo
         - Descrizione
-        - Gruppo (se necessario)
-
+      
    4. **Formattazione**
-
+   
       - Usa i controlli di formattazione per:
         - Testo in grassetto
         - Testo in corsivo
         - Modalità matematica
         - Prima lettera in grassetto
       - Esempio del risultato finale
-
+   
       ```latex
       \newglossaryentry{cnel}{
               type=\acronymtype,
-              name={CNEL},
-              first={Community Noise Equivalent Level (CNEL)},
-              text={CNEL},
+              name={\textbf{CNEL}},
+              first={\textbf{C}ommunity \textbf{N}oise \textbf{E}quivalent \textbf{L}evel (CNEL)},
+              text={\textbf{CNEL}},
               description={Indicatore del livello di rumore medio giornaliero con penalizzazioni per il periodo serale e notturno},
           group={dac}
-      }
+          }
       ```
-
+   
    ### Funzionalità Avanzate
-
+   
    - **Importazione LaTeX**
      - Supporto per file esistenti
      - Parsing automatico delle definizioni
      - Mantenimento della formattazione
-
+   
    - **Esportazione**
      - Generazione codice LaTeX
      - Esportazione selettiva per categoria

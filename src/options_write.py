@@ -69,7 +69,8 @@ class FormatManager:
         'textbf': {'label': '\\textbf{}', 'math': False},
         'textit': {'label': '\\textit{}', 'math': False},
         'mathbf': {'label': '\\mathbf{}', 'math': True},
-        'mathit': {'label': '\\mathit{}', 'math': True}
+        'mathit': {'label': '\\mathit{}', 'math': True},
+        'textbackslash': {'label': '\\textbackslash', 'math': True}
     }
     
     @staticmethod
@@ -77,16 +78,10 @@ class FormatManager:
         """Restituisce le opzioni di formattazione disponibili per la modalità corrente"""
         return {k: v for k, v in FormatManager.FORMAT_OPTIONS.items() 
                 if v['math'] == is_math_mode}
-    
+
     @staticmethod
     def format_text(text, format_type, is_math_mode=False, first_letter_bold=False):
-        """Applica la formattazione al testo
-        Args:
-            text (str): Il testo da formattare
-            format_type (str): Il tipo di formattazione ('Normale', '\\textbf', '\\textit', '\\mathbf', '\\mathit')
-            is_math_mode (bool): Se True, avvolge il testo in $
-            first_letter_bold (bool): Se True, applica il grassetto alla prima lettera di ogni parola
-        """
+        """Gestione dei menu a cascata e formattazione del testo"""
         if not text:
             return text
             
@@ -95,27 +90,77 @@ class FormatManager:
         print(f"Formato: {format_type}")
         print(f"Math mode: {is_math_mode}")
         print(f"First letter bold: {first_letter_bold}")
-        
+
+        # Controllo per parentesi con \textbackslash
+        if '(' in text and ')' in text:
+            print("Rilevate parentesi nel testo")
+            before_paren = text[:text.find('(')]
+            paren_content = text[text.find('('): text.find(')')+1]
+            after_paren = text[text.find(')')+1:]
+            
+            print(f"Contenuto prima delle parentesi: {before_paren}")
+            print(f"Contenuto tra parentesi: {paren_content}")
+            print(f"Contenuto dopo le parentesi: {after_paren}")
+            
+            # Se c'è \textbackslash nelle parentesi, tratta le parti separatamente
+            if '\\textbackslash' in paren_content:
+                print("Rilevato \\textbackslash nelle parentesi")
+                # Formatta il testo prima delle parentesi
+                if first_letter_bold and before_paren:
+                    print("Applicazione grassetto prima lettera al testo prima delle parentesi")
+                    words = before_paren.split()
+                    formatted_words = []
+                    for word in words:
+                        if word:
+                            formatted_words.append('\\textbf{' + word[0] + '}' + word[1:])
+                            print(f"Parola formattata: {formatted_words[-1]}")
+                    before_paren = ' '.join(formatted_words)
+                result = before_paren + paren_content + after_paren
+                print(f"Risultato con \\textbackslash preservato: {result}")
+                print("===============================")
+                return result
+
+        # Gestione formato \textbackslash senza dollari
+        if format_type == '\\textbackslash':
+            print("Applicazione formato \\textbackslash")
+            result = f"\\textbackslash {text}"  # Spazio aggiunto
+            print(f"Risultato con \\textbackslash: {result}")
+            print("===============================")
+            return result.strip()  # Rimuove spazi extra
+
+
+        def should_format(word):
+            return not (word.startswith('(') and word.endswith(')'))
+
         result = text
         
         # Gestisci il grassetto della prima lettera
-        if first_letter_bold and format_type == 'Normale':
+        if first_letter_bold:
+            print("Applicazione grassetto prima lettera")
             words = text.split()
-            result = ' '.join('\\textbf{' + word[0] + '}' + word[1:] if word else '' for word in words)
-        
-        # Applica la formattazione principale solo se non è 'Normale'
+            result = []
+            for word in words:
+                if should_format(word) and word and not word.startswith('\\textbackslash'):
+                    result.append('\\textbf{' + word[0] + '}' + word[1:])
+                    print(f"Parola formattata: {result[-1]}")
+                else:
+                    result.append(word)
+                    print(f"Parola non formattata: {word}")
+            result = ' '.join(result)
+            
+        # Altrimenti applica format_type se non è Normale
         elif format_type != 'Normale':
-            # Rimuovi eventuali graffe dal format_type
+            print(f"Applicazione formato: {format_type}")
             clean_format = format_type.strip('{}')
             result = f"{clean_format}{{{text}}}"
-        
-        # Applica la modalità matematica se richiesto
-        if is_math_mode:
+
+        # Applica la modalità matematica se richiesto e non è \textbackslash
+        if is_math_mode and format_type != '\\textbackslash':
+            print("Applicazione modalità matematica")
             result = f"${result}$"
-            
-        print(f"Risultato: {result}")
+
+        print(f"Risultato finale: {result}")
         print("===============================")
-        
         return result
             
     @staticmethod
@@ -203,18 +248,15 @@ class FormatWidgets:
     def pack(self, **kwargs):
         """Passa i parametri di pack al frame"""
         self.frame.pack(**kwargs)
-    
-    
+     
     def get_format_options(self):
         """Ottiene le opzioni di formattazione disponibili"""
         is_math = self.is_math_mode.get()
         options = ['Normale']
-        
         if is_math:
-            options.extend(['\\mathbf{}', '\\mathit{}'])
+            options.extend(['\\mathbf{}', '\\mathit{}', '\\textbackslash'])
         else:
             options.extend(['\\textbf{}', '\\textit{}'])
-        
         return options
     
     def update_format_options(self):
@@ -248,7 +290,7 @@ class FormatWidgets:
         format_type = self.format_var.get()
         
         return {
-            'format_type': format_type,  # Non aggiungiamo più le graffe qui
+            'format_type': format_type,  # Non aggiungiamo più le graffe
             'is_math_mode': self.is_math_mode.get(),
             'first_letter_bold': self.first_letter_bold.get() if hasattr(self, 'bold_check') else False
         }

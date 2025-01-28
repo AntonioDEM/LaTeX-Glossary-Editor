@@ -5,7 +5,7 @@ Configurazione globale dell'applicazione
 """
 APP_SETTINGS = {
     "app_name": "LaTeX Glossary Editor",
-    "version": "2.0.0",
+    "version": "2.3.0",
     "release_date": "Gennaio 2025",
     "developer": {
         "name": "Antonio Demarcus",

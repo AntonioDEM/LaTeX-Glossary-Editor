@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import time
+from datetime import datetime
 import sqlite3
 import re
 import os
@@ -76,32 +77,30 @@ class DatabaseViewer(ttk.Frame):
     
     def update_view(self):
         """Aggiorna la vista con i dati più recenti dal database"""
-        print("\n=== Debug: Aggiornamento Vista Database ===")
         if not self.db:
-            print("Nessun database disponibile")
+            print("Database non disponibile per update_view")
             return
-            
-        # Pulisci la vista
+        print("\n=== Debug: Aggiornamento vista database ===")
+                
         for item in self.tree.get_children():
             self.tree.delete(item)
-            
+                
         try:
-            db_path = self.db.db_path  # Prendiamo il path dal database
-            with sqlite3.connect(db_path) as conn:  # Usiamo il path corretto
+            with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute('''
-                    SELECT e.id, c.name, e.key, e.type, e.name, e.first, e.text, e.description, e.group_name, c.comment
+                    SELECT e.id, c.name, e.key, e.type, e.name, 
+                        e.first, e.text, e.description, 
+                        c.group_name, c.comment
                     FROM entries e
                     JOIN categories c ON e.category_id = c.id
                     ORDER BY c.name, e.key
                 ''')
                 
-                # Inserisci i dati nel Treeview
                 rows = cursor.fetchall()
-                print(f"Righe trovate: {len(rows)}")
-                
+                print(f"Recuperate {len(rows)} righe")
                 for row in rows:
-                    values = (
+                    values = [
                         row[0],              # ID
                         row[1],              # Categoria
                         row[2],              # Chiave
@@ -110,16 +109,20 @@ class DatabaseViewer(ttk.Frame):
                         row[5],              # First
                         row[6],              # Testo
                         row[7],              # Descrizione
-                        row[8],              # Group name (nuovo)
-                        row[9] or ""         # Commento
-                    )
+                        row[8],              # Gruppo (dalla tabella categories)
+                        row[9]               # Commento
+                    ]
+                    print(f"Inserimento riga - Categoria: {values[1]}, Chiave: {values[2]}, Gruppo: {values[8]}")
                     self.tree.insert('', 'end', values=values)
+                        
+            print("Aggiornamento vista completato")
                     
         except sqlite3.Error as e:
-            print(f"Errore SQL: {str(e)}")
-            messagebox.showerror("Errore Database", 
-                            f"Errore nel caricamento dei dati: {str(e)}")
-        print("===============================")
+                error_msg = f"Errore nel caricamento dei dati: {str(e)}"
+                print(f"ERRORE: {error_msg}")
+                messagebox.showerror("Errore Database", error_msg)
+            
+                print("===============================\n")
 
 class GlossaryEditor(tk.Tk):
     def __init__(self):
@@ -128,7 +131,7 @@ class GlossaryEditor(tk.Tk):
         self.os_handler = GlossaryOSHandler()
         self.os_handler.ensure_directories_exist()
         
-        self.title("LaTeX Glossary Editor - V2.1.1")
+        self.title("LaTeX Glossary Editor - V2.3.0")
         self.geometry("1000x800")
 
         # Inizializza il project manager
@@ -214,7 +217,8 @@ class GlossaryEditor(tk.Tk):
         file_menu.add_command(label="Esporta in LaTeX", command=self.export_latex_file)
         file_menu.add_separator()
         file_menu.add_command(label="Nuova Categoria", command=self.new_category)
-        file_menu.add_command(label="Elimina Categoria", command=self.delete_category)  # Aggiunto qui
+        file_menu.add_command(label="Elimina Categoria", command=self.delete_category)
+        file_menu.add_command(label="Pulisci Gruppi", command=self.db.cleanup_group_names)
         file_menu.add_separator()
         file_menu.add_command(label="Apri Cartella Dati", command=self.open_data_folder)
         file_menu.add_separator()
@@ -226,6 +230,11 @@ class GlossaryEditor(tk.Tk):
         help_menu.add_command(label="About", command=self.show_about)
     
     def load_project(self, project_name):
+        # Close existing connections
+        if self.db_manager:
+            self.db_manager.close()
+        if hasattr(self, 'db_viewer') and self.db_viewer.db:
+            self.db_viewer.db = None
         """Carica un progetto esistente"""
         project = self.project_manager.get_project(project_name)
         if project:
@@ -263,6 +272,10 @@ class GlossaryEditor(tk.Tk):
         """Mostra la finestra di gestione progetti"""
         from src.project_manager import ProjectDialog
         dialog = ProjectDialog(self, self.project_manager)
+
+        # Imposta la dimensione della finestra (larghezza x altezza)
+        dialog.window.geometry("800x350")  # Modifica le dimensioni secondo necessità
+
         self.wait_window(dialog.window)  # Aspetta che la finestra venga chiusa
 
         # Se non c'è nessun progetto aperto dopo la chiusura del dialog, esci
@@ -337,6 +350,20 @@ class GlossaryEditor(tk.Tk):
         self.category_comment.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
         ttk.Button(comment_frame, text="Salva commento", 
                 command=self.save_category_comment).pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Aggiungi il campo per il gruppo qui, dopo che left_frame è stato creato
+        group_frame = ttk.Frame(category_frame)
+        group_frame.pack(fill=tk.X, pady=2)
+        ttk.Label(group_frame, text="Gruppo:").pack(side=tk.LEFT)
+        self.fields['group'] = ttk.Entry(group_frame)
+        self.fields['group'].pack(side=tk.LEFT, fill=tk.X, expand=False, padx=(5, 0))
+        ttk.Button(group_frame, text="Salva gruppo", 
+        command=self.save_category_group).pack(side=tk.LEFT, padx=(5, 0))
+
+        # Checkbox per modalità matematica
+        ttk.Checkbutton(category_frame, text="Modalità matematica", 
+                    variable=self.math_mode,
+                    command=self.on_math_mode_change).pack(side=tk.LEFT,pady=5)
 
         # Frame per i controlli principali
         controls_frame = ttk.Frame(main_container)
@@ -352,13 +379,6 @@ class GlossaryEditor(tk.Tk):
         self.fields['first'] = self.create_input_field(left_frame, "Prima occorrenza:", 'first', has_format=True)
         self.fields['text'] = self.create_input_field(left_frame, "Testo:", 'text', has_format=True)
 
-        # Aggiungi il campo per il gruppo qui, dopo che left_frame è stato creato
-        group_frame = ttk.Frame(left_frame)
-        group_frame.pack(fill=tk.X, pady=2)
-        ttk.Label(group_frame, text="Gruppo:").pack(side=tk.LEFT)
-        self.fields['group'] = ttk.Entry(group_frame)
-        self.fields['group'].pack(side=tk.LEFT, fill=tk.X, expand=False, padx=(5, 0))
-        
         # Frame per descrizione e anteprima
         desc_preview_frame = ttk.Frame(left_frame)
         desc_preview_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
@@ -380,10 +400,6 @@ class GlossaryEditor(tk.Tk):
         preview_scroll.pack(fill=tk.X, side=tk.BOTTOM)
         self.latex_preview.configure(xscrollcommand=preview_scroll.set)
         
-        # Checkbox per modalità matematica
-        ttk.Checkbutton(left_frame, text="Modalità matematica", 
-                    variable=self.math_mode,
-                    command=self.on_math_mode_change).pack(pady=5)
         
         # Pannello destro - Lista definizioni
         right_frame = ttk.Frame(controls_frame)
@@ -481,15 +497,29 @@ class GlossaryEditor(tk.Tk):
             print(f"Tentativo di connessione al database: {self.db.db_path}")
             with sqlite3.connect(self.db.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute('SELECT comment FROM categories WHERE name = ?', (category,))
+                cursor.execute('SELECT comment, group_name FROM categories WHERE name = ?', (category,))
                 result = cursor.fetchone()
                 
-                # Aggiorna il campo commento
+                # Aggiorna il campo commento e gruppo
                 print(f"Result from query: {result}")
                 self.category_comment.delete(0, tk.END)
-                if result and result[0]:
-                    self.category_comment.insert(0, result[0])
+                self.fields['group'].delete(0, tk.END)
+                if result:
+                    comment, group_name = result
+                    if comment:
+                        self.category_comment.insert(0, comment)
+                    if group_name:
+                        # Prima controlla se ha \group{}
+                        match = re.search(r'\\group{(.*?)}', group_name)
+                        if match:
+                            cleaned_group = match.group(1)
+                        else:
+                            cleaned_group = group_name
+                        
+                        self.fields['group'].insert(0, cleaned_group)
+                        print(f"Gruppo caricato: {cleaned_group} (originale: {group_name})")
                     print(f"Commento caricato: {result[0]}")
+                    print(f"Gruppo caricato: {result[1]}")
                 else:
                     print("Nessun commento trovato nel database")
         except sqlite3.Error as e:
@@ -523,15 +553,46 @@ class GlossaryEditor(tk.Tk):
     def new_category(self):
         """Crea una nuova categoria"""
         name = tk.simpledialog.askstring("Nuova Categoria", 
-                                       "Nome della nuova categoria:")
+                                    "Nome della nuova categoria:")
         if name:
-            if self.db_manager.add_category(name):
-                self.update_category_list()
-                self.category_var.set(name)
-                self.update_entries_list()
-            else:
+            try:
+                # Genera un nuovo category_id
+                category_id = f"CAT_{os.urandom(4).hex()}"
+                
+                # Inserisci la nuova categoria con il suo ID
+                with sqlite3.connect(self.db.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        INSERT INTO categories 
+                        (name, category_id) 
+                        VALUES (?, ?)
+                    ''', (name, category_id))
+                    conn.commit()
+                    
+                    print(f"Creata nuova categoria: {name} con ID: {category_id}")
+                    
+                    # Pulisci i campi correlati
+                    self.category_comment.delete(0, tk.END)
+                    self.fields['group'].delete(0, tk.END)
+                    self.latex_preview.delete('1.0', tk.END)
+                    self.clear_fields()
+    
+              
+                    # Aggiorna le liste
+                    self.update_category_list()
+                    self.category_var.set(name)
+                    self.update_entries_list()
+
+                    # Aggiorna la vista del database se presente
+                    if hasattr(self, 'db_viewer'):
+                        self.db_viewer.update_view()
+                        
+            except sqlite3.IntegrityError:
                 messagebox.showerror("Errore", 
-                                   "Categoria già esistente o errore nel database")
+                                f"Una categoria con il nome '{name}' esiste già")
+            except Exception as e:
+                messagebox.showerror("Errore", 
+                                f"Errore durante la creazione della categoria: {str(e)}")
     
     def delete_category(self):
         """Elimina la categoria selezionata"""
@@ -557,7 +618,29 @@ class GlossaryEditor(tk.Tk):
                     self.db_viewer.update_view()
             else:
                 messagebox.showerror("Errore", message)
-    
+                
+    def save_category_group(self):
+        """Salva il gruppo della categoria selezionata"""
+        category = self.category_var.get()
+        group = self.fields['group'].get().strip()
+        
+        if not category:
+            messagebox.showwarning("Attenzione", "Seleziona prima una categoria")
+            return
+        
+        try:
+            # Salva il gruppo
+            if self.db_manager.save_category_group(category, group):
+                # Aggiorna entrambe le viste
+                self.update_entries_list()
+                if hasattr(self, 'db_viewer'):
+                    self.db_viewer.update_view()
+                messagebox.showinfo("Successo", "Gruppo salvato correttamente")
+            else:
+                messagebox.showerror("Errore", "Impossibile salvare il gruppo")
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore durante il salvataggio: {str(e)}")
+ 
     def clean_latex_commands(self, text):
         """Pulisce i comandi LaTeX dal testo per la visualizzazione"""
         if not text:
@@ -590,130 +673,319 @@ class GlossaryEditor(tk.Tk):
         return result
 
     def clean_group_value(self, group_text):
-        """Pulisce il formato LaTeX dal valore del gruppo"""
-        if group_text:
-            # Rimuove \group{} e mantiene solo il contenuto
-            match = re.search(r'\\group{(.*?)}', group_text)
-            if match:
-                return match.group(1)
-        return group_text
+        """Rimuove \group{} per la visualizzazione nell'editor"""
+        if not group_text:
+            return ""
+        match = re.search(r'\\group{(.*?)}', group_text)
+        return match.group(1) if match else group_text
 
+    def log_debug(self, method_name, message):
+        """Salva i messaggi di debug in un file"""
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            # Ottieni il percorso base dell'applicazione
+            base_dir = self.os_handler.get_base_directory()
+            log_dir = base_dir / "logs"
+            log_path = log_dir / "debug_log.txt"
+            
+            # Crea la directory dei log se non esiste
+            log_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Stampa il percorso del file di log
+            #print(f"\nSalvataggio log in: {log_path}\n")
+            
+            with open(log_path, "a", encoding='utf-8') as f:
+                f.write(f"\n[{timestamp}] {method_name}:\n{message}\n{'='*50}\n")
+                
+        except Exception as e:
+            print(f"Errore durante il salvataggio del log: {str(e)}")
+            print(f"Tentativo di salvare in: {log_path}")
 
     def on_entry_select(self, event):
         """Gestisce la selezione di una definizione dalla lista"""
-        selection = self.entries_list.curselection()
-        if not selection:
-            return
-                
-        key = self.entries_list.get(selection[0])
-        category = self.category_var.get()
-        
         try:
-            with sqlite3.connect(self.db.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT e.*, c.comment,
-                        fo_name.format_type as name_format,
-                        fo_text.format_type as text_format,
-                        fo_first.format_type as first_format,
-                        fo_name.is_math_mode as name_math,
-                        fo_text.is_math_mode as text_math,
-                        fo_first.is_math_mode as first_math,
-                        fo_first.first_letter_bold as first_bold,
-                        e.group_name 
-                    FROM entries e
-                    JOIN categories c ON e.category_id = c.id
-                    LEFT JOIN formatting_options fo_name ON e.id = fo_name.entry_id AND fo_name.field_name = 'name'
-                    LEFT JOIN formatting_options fo_text ON e.id = fo_text.entry_id AND fo_text.field_name = 'text'
-                    LEFT JOIN formatting_options fo_first ON e.id = fo_first.entry_id AND fo_first.field_name = 'first'
-                    WHERE c.name = ? AND e.key = ?
-                ''', (category, key))
-                
-                entry = cursor.fetchone()
-                if entry:
-                    # Mantieni i valori originali per l'anteprima
-                    self.original_values = {
-                        'key': key,
-                        'name': entry[4],
-                        'first': entry[5],
-                        'text': entry[6],
-                        'description': entry[7],
-                        'type': entry[3],
-                        'group': entry[-1]
-                    }
+            selection = self.entries_list.curselection()
+            if not selection:
+                return
                     
-                    
-                    # Pulisci i campi per la visualizzazione nell'editor
-                    self.clear_fields()
-                    
-                    # Pulisci i valori usando il metodo clean_latex_commands
-                    self.fields['key'].insert(0, key)
-                    self.fields['name'].insert(0, self.clean_latex_commands(entry[4]))
-                    self.fields['first'].insert(0, self.clean_latex_commands(entry[5]))
-                    self.fields['text'].insert(0, self.clean_latex_commands(entry[6])) # Qui è importante
+            key = self.entries_list.get(selection[0])
+            category = self.category_var.get()
+            format_db = FormatDatabase(self.db.db_path)
 
-                    # Pulisci il valore del gruppo prima di mostrarlo
-                    group_value = self.clean_group_value(entry[-1])
-                    self.fields['group'].insert(0, group_value if group_value else "")
+            #self.log_debug("on_entry_select", f"Selezione entry:\nKey: {key}\nCategoria: {category}")
 
-                    if entry[7]:  # descrizione
+            try:
+                with sqlite3.connect(self.db.db_path) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        SELECT 
+                            e.id,
+                            e.key,
+                            e.name,
+                            e.first,
+                            e.text,
+                            e.description,
+                            c.comment,
+                            c.group_name,
+                            fo.format_type,
+                            fo.first_letter_bold,
+                            fo.is_math_mode,
+                            fo.format_type,
+                            fo.first_letter_bold,
+                            fo.is_math_mode
+                        FROM entries e
+                        JOIN categories c ON e.category_id = c.id
+                        LEFT JOIN formatting_options fo ON e.id = fo.entry_id AND fo.field_name = 'name'
+                        WHERE c.name = ? AND e.key = ?
+                    ''', (category, key))
+                        
+                    entry = cursor.fetchone()
+                    if entry:
+                        # self.log_debug("on_entry_select", f"""
+                        # Dati recuperati dal DB:
+                        # ID: {entry[0]}
+                        # Key: {entry[1]}
+                        # Name: {entry[2]}
+                        # First: {entry[3]}
+                        # Text: {entry[4]}
+                        # Description: {entry[5]}
+                        # Comment: {entry[6]}
+                        # Group: {entry[7]}
+                        # Format Type: {entry[8]}
+                        # First Letter Bold: {entry[9]}
+                        # Is Math Mode: {entry[10]}
+                        # First Format Type: {entry[11]}
+                        # First Letter Bold Setting: {entry[12]}
+                        # First Math Mode: {entry[13]}
+                        # """)
+
+                        # Pulisci tutti i campi
+                        self.clear_fields()
+
+                        # 1. Gestione campi base
+                        # Chiave
+                        self.fields['key'].insert(0, entry[1])
+
+                        # 2. Gestione name con formattazione
+                        name_settings = format_db.get_format(entry[0], 'name')
+                        name_text = entry[2]
+                        if name_settings['format_type'] == '\\textbackslash':
+                            name_text = name_text.replace('\\textbackslash ', '')
+                        else:
+                            # Se è in modalità matematica, rimuovi i $ solo per l'editor
+                            if name_settings['is_math_mode'] and name_text.startswith('$') and name_text.endswith('$'):
+                                name_text = name_text[1:-1]  # Rimuovi $ solo per l'editor
+                            else:
+                                name_text = self.clean_latex_commands(name_text)
+                        self.fields['name'].insert(0, name_text)
+                        self.name_format.set_values(**name_settings)
+
+                        # 3. Gestione first con formattazione speciale
+                        first_settings = {
+                            'format_type': entry[11] or 'Normale',
+                            'first_letter_bold': bool(entry[12]),
+                            'is_math_mode': bool(entry[13])
+                        }
+                        # Pulizia del testo first mantenendo eventuali contenuti matematici
+                        first_text = entry[3]
+                        if '($' in first_text:  # Se contiene formule matematiche in parentesi
+                            first_text = self.clean_latex_commands(first_text)
+                        else:
+                            first_text = self.clean_latex_commands(first_text)
+                        self.fields['first'].insert(0, first_text)
+                        self.first_format.set_values(**first_settings)
+
+                        # 4. Gestione text con formattazione
+                        text_settings = format_db.get_format(entry[0], 'text')
+                        text_text = entry[4]
+                        if text_settings['format_type'] == '\\textbackslash':
+                            text_text = text_text.replace('\\textbackslash ', '')
+                        else:
+                            # Se è in modalità matematica, rimuovi i $ solo per l'editor
+                            if text_settings['is_math_mode'] and text_text.startswith('$') and text_text.endswith('$'):
+                                text_text = text_text[1:-1]  # Rimuovi $ solo per l'editor
+                            else:
+                                text_text = self.clean_latex_commands(text_text)
+                        self.fields['text'].insert(0, text_text)
+                        self.text_format.set_values(**text_settings)
+
+                        # 5. Gestione descrizione
                         self.fields['description'].delete('1.0', tk.END)
-                        self.fields['description'].insert('1.0', entry[7])
-                    
-                    # Aggiorna l'anteprima con i valori originali
-                    self.update_preview(use_original=True)
-                    
-        except sqlite3.Error as e:
-            messagebox.showerror("Errore Database", 
-                            f"Errore nel recupero dei dati: {str(e)}")
+                        self.fields['description'].insert('1.0', entry[5] or '')
+
+                        # 6. Gestione commento categoria
+                        self.category_comment.delete(0, tk.END)
+                        if entry[6]:  # comment
+                            self.category_comment.insert(0, entry[6])
+
+                        # 7. Gestione gruppo
+                        self.fields['group'].delete(0, tk.END)
+                        if entry[7]:  # group_name
+                            group_match = re.search(r'\\group{(.*?)}', entry[7])
+                            group_value = group_match.group(1) if group_match else entry[7]
+                            self.fields['group'].insert(0, group_value)
+
+                        # 8. Impostazione modalità matematica globale
+                        self.math_mode.set(bool(entry[10]))
+
+                        # 9. Aggiornamento formattazioni finali
+                        for field_name in ['name', 'text', 'first']:
+                            format_widget = getattr(self, f'{field_name}_format', None)
+                            if format_widget:
+                                settings = format_db.get_format(entry[0], field_name)
+                                #self.log_debug("on_entry_select", f"Formattazione per {field_name}: {settings}")
+                                format_widget.set_values(**settings)
+
+                        # 10. Aggiorna l'anteprima
+                        self.update_preview(use_original=True)
+                        
+            except sqlite3.Error as e:
+                error_msg = f"Errore nel recupero dei dati: {str(e)}"
+                #self.log_debug("on_entry_select", f"ERRORE: {error_msg}")
+                messagebox.showerror("Errore Database", error_msg)
+        
+        except Exception as e:
+            #self.log_debug("on_entry_select", f"ERRORE GENERALE: {str(e)}")
+            raise
+
+    def format_field(self, text, format_settings):
+        """Applica la formattazione appropriata al testo"""
+        if not text:
+            return text
+            
+        format_type = format_settings.get('format_type', 'Normale')
+        is_math_mode = format_settings.get('is_math_mode', False)
+  
+        # Correzione per gestire '\\textbf' e '\\textit' senza parentesi graffe
+        if format_type == '\\textbf':
+            format_type = '\\textbf{}'
+        elif format_type == '\\textit':
+            format_type = '\\textit{}'
+        
+        # Prima applica la formattazione base
+        if format_type == 'Normale':
+            formatted_text = text
+        elif format_type == '\\textbackslash':
+            formatted_text = f"\\textbackslash {text}"
+            # Se è textbackslash, non applicare la modalità matematica
+            is_math_mode = False
+        elif format_type == '\\textbf{}':
+            formatted_text = f"\\textbf{{{text}}}"
+        elif format_type == '\\textit{}':
+            formatted_text = f"\\textit{{{text}}}"
+        elif format_type == '\\mathbf{}':
+            formatted_text = f"\\mathbf{{{text}}}"
+        elif format_type == '\\mathit{}':
+            formatted_text = f"\\mathit{{{text}}}"
+        else:
+            formatted_text = text
+        
+        # Applica la modalità matematica solo se necessario e se non è un textbackslash
+        if is_math_mode and format_type != '\\textbackslash':
+            # Se il testo non contiene già $
+            if not (formatted_text.startswith('$') and formatted_text.endswith('$')):
+                formatted_text = f"${formatted_text}$"
+        
+        return formatted_text
 
     def update_preview(self, event=None, use_original=False):
-        """Aggiorna l'anteprima LaTeX in tempo reale"""
+        """Aggiorna l'anteprima LaTeX con i valori correnti dei campi"""
         try:
-            if use_original and hasattr(self, 'original_values'):
-                # Usa i valori originali dal database
-                values = self.original_values
-            else:
-                # Usa i valori correnti dei campi
-                values = {
-                    'key': self.fields['key'].get().strip(),
-                    'name': self.fields['name'].get().strip(),
-                    'first': self.fields['first'].get().strip(),
-                    'text': self.fields['text'].get().strip(),
-                    'description': self.fields['description'].get('1.0', tk.END).strip(),
-                    'group': self.fields['group'].get().strip(),
-                    'type': self.type_var.get().strip()
-                }
-
-            if not values['key']:  # Se non c'è chiave, non generare l'anteprima
+            # Se non c'è una chiave, mostra il template base
+            if not self.fields['key'].get().strip():
+                base_template = '''\\newglossaryentry{}{
+        type=\\acronymtype,
+        name={},
+        first={},
+        text={},
+        description={},
+        group={}
+    }'''
                 self.latex_preview.delete('1.0', tk.END)
+                self.latex_preview.insert('1.0', base_template)
                 return
-            # Ottieni il valore del gruppo
-            group_value = self.fields['group'].get().strip() if 'group' in self.fields else ""
+
+            # Formatta name e text
+            name = self.fields['name'].get().strip()
+            text = self.fields['text'].get().strip()
+            first = self.fields['first'].get().strip()
+
+            # Ottieni e logga le impostazioni di formato
+            name_settings = self.name_format.get_values()
+            text_settings = self.text_format.get_values()
+            first_settings = self.first_format.get_values()
+
+            print("Name Settings:", name_settings)
+            print("Text Settings:", text_settings)
+            print("First Settings:", first_settings)
+
+            # Applica la formattazione
+            formatted_name = self.format_field(name, name_settings)
+            formatted_text = self.format_field(text, text_settings)
+
+            # Gestione speciale per il campo first
+            if first_settings.get('first_letter_bold', False):
+                words = first.split()
+                formatted_words = []
+                for word in words:
+                    if '(' in word and ')' in word:
+                        before_paren = word[:word.index('(')]
+                        paren_content = word[word.index('('):]
+                        if before_paren:
+                            formatted_words.append(f'\\textbf{{{before_paren[0]}}}{before_paren[1:]}{paren_content}')
+                        else:
+                            formatted_words.append(word)
+                    elif word.startswith('$') and word.endswith('$'):
+                        formatted_words.append(word)
+                    else:
+                        if word:
+                            first_letter = word[0]
+                            rest = word[1:] if len(word) > 1 else ''
+                            formatted_words.append(f'\\textbf{{{first_letter}}}{rest}')
+                formatted_first = ' '.join(formatted_words)
+            else:
+                formatted_first = self.format_field(first, first_settings)
+                print("Formatted First:", formatted_first)
+
+            # Gestione del gruppo
+            category_name = self.category_var.get()
+            with sqlite3.connect(self.db.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute('SELECT group_name FROM categories WHERE name = ?', (category_name,))
+                result = cursor.fetchone()
+                group_value = result[0] if result else None
+
+            # Se il gruppo esiste, estrai solo il valore interno
+            group_text = ""
+            if group_value:
+                match = re.search(r'\\group{(.*?)}', group_value)
+                if match:
+                    group_text = f",\n    group={{{match.group(1)}}}"
+                else:
+                    group_text = f",\n    group={{{group_value}}}"
+
 
             # Genera il codice LaTeX
-            latex_code = f"""\\newglossaryentry{{{values['key']}}}{{
-        type={values['type']},
-        name={{{values['name']}}},
-        first={{{values['first']}}},
-        text={{{values['text']}}},
-        description={{{values['description']}}}"""
-        # Aggiungi il gruppo se presente
-            if group_value:
-                latex_code += f",\n    group={{{group_value}}}"
-
-            # Chiudi la definizione
-            latex_code += "\n}"
+            latex_code = f"""\\newglossaryentry{{{self.fields['key'].get().strip()}}}{{
+        type=\\acronymtype,
+        name={{{formatted_name}}},
+        first={{{formatted_first}}},
+        text={{{formatted_text}}},
+        description={{{self.fields['description'].get('1.0', tk.END).strip()}}}{group_text}
+    }}"""
             
-            # Aggiorna il campo di anteprima
+            print("Generated LaTeX Code:", latex_code)
+
             self.latex_preview.delete('1.0', tk.END)
             self.latex_preview.insert('1.0', latex_code)
-            
+
         except Exception as e:
-            print(f"Errore nell'aggiornamento dell'anteprima: {str(e)}")
+            #self.log_debug("update_preview", f"ERRORE: {str(e)}")
+            print(f"Errore anteprima: {str(e)}")
             self.latex_preview.delete('1.0', tk.END)
-            self.latex_preview.insert('1.0', f"Errore nell'anteprima: {str(e)}")
-    
+            self.latex_preview.insert('1.0', f"Errore anteprima: {str(e)}")
+   
     def save_entry(self):
         """Salva la definizione nel database"""
         if not self.db or not self.db_manager:
@@ -739,6 +1011,17 @@ class GlossaryEditor(tk.Tk):
             self.db_manager.connect()
             self.db_manager.begin_transaction()
 
+            print("Inizio transazione database")
+
+            # Salva il commento
+            comment = self.category_comment.get().strip()
+            if category:
+                print(f"Salvataggio commento per categoria {category}: {comment}")
+                self.db_manager.execute(
+                    'UPDATE categories SET comment = ? WHERE name = ?',
+                    (comment, category)
+                )
+
             # Ottieni l'ID della categoria
             cursor = self.db_manager.execute('''
                 SELECT id FROM categories WHERE name = ?
@@ -754,23 +1037,38 @@ class GlossaryEditor(tk.Tk):
             category_id = result[0]
             print(f"ID Categoria trovato: {category_id}")
 
+            # Salva il gruppo nella tabella categories
+            # Ottieni e formatta il valore del gruppo
+            group_value = self.fields['group'].get().strip()
+            
+            # Se c'è un valore per il gruppo
+            if group_value:
+                # Se non ha già il comando \group{}, aggiungilo
+                if not group_value.startswith('\\group{'):
+                    group_text = f"\\group{{{group_value}}}"
+                else:
+                    group_text = group_value
+                    
+                print(f"Salvataggio gruppo per categoria {category}: {group_text}")
+
+            # Genera un nuovo definition_id
+            definition_id = f"DEF_{os.urandom(4).hex()}"
+            print(f"Nuovo definition_id generato: {definition_id}")
+
             # Prima cerca ed elimina l'entry esistente (case insensitive)
+            print(f"Eliminazione entry esistente per key: {key}")
             self.db_manager.execute('''
                 DELETE FROM entries 
                 WHERE category_id = ? AND LOWER(key) = LOWER(?)
             ''', (category_id, key))
 
             # Ottieni i widget di formattazione e i loro valori
+            print("Elaborazione formattazione testi")
             widgets_info = {
                 'name': (self.name_format, self.fields['name'].get().strip()),
                 'text': (self.text_format, self.fields['text'].get().strip()),
                 'first': (getattr(self, 'first_format', None), self.fields['first'].get().strip())
             }
-            
-            # Ottieni il valore del gruppo
-            group_value = self.fields['group'].get().strip()
-            if group_value:
-                group_value = f"\\group{{{group_value}}}"
 
             # Formatta i testi
             formatted_texts = {}
@@ -784,12 +1082,13 @@ class GlossaryEditor(tk.Tk):
                             False,  # Forza is_math_mode a False per 'first'
                             values.get('first_letter_bold', False)
                         )
-                    elif values['is_math_mode']:
-                        formatted_texts[field] = f"${text}$"
+                    elif values['format_type'] == '\\textbackslash':
+                        # Gestione speciale per \textbackslash
+                        formatted_texts[field] = f"\\textbackslash {text.strip()}"
                     else:
                         formatted_texts[field] = FormatManager.format_text(
                             text,
-                            values['format_type'],
+                            values['format_type'], 
                             values['is_math_mode'],
                             values.get('first_letter_bold', False)
                         )
@@ -798,76 +1097,64 @@ class GlossaryEditor(tk.Tk):
                     formatted_texts[field] = text
 
             description = self.fields['description'].get('1.0', tk.END).strip()
+            print(f"Descrizione: {description[:50]}...")  # Primi 50 caratteri
 
             # Salva la nuova entry
-            # Ottieni l'ID esistente se presente
+            print("Salvataggio nuova entry")
             cursor = self.db_manager.execute('''
-                SELECT id FROM entries 
-                WHERE category_id = ? AND LOWER(key) = LOWER(?)
-            ''', (category_id, key))
-            result = cursor.fetchone()
-            entry_id = result[0] if result else None
-
-            # Usa l'ID esistente o lascia che il database ne assegni uno nuovo
-            if entry_id:
-                cursor = self.db_manager.execute('''
-                    UPDATE entries 
-                    SET name = ?, first = ?, text = ?, description = ?, group_name = ?, type = ?
-                    WHERE id = ?
-                ''', (
-                    formatted_texts['name'],
-                    formatted_texts['first'],
-                    formatted_texts['text'],
-                    description,
-                    group_value,
-                    '\\acronymtype',
-                    entry_id
-                ))
-            else:
-                cursor = self.db_manager.execute('''
-                    INSERT INTO entries 
-                    (category_id, key, type, name, first, text, description, group_name)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    category_id,
-                    key,
-                    '\\acronymtype',
-                    formatted_texts['name'],
-                    formatted_texts['first'],
-                    formatted_texts['text'],
-                    description,
-                    group_value
-                ))
-                entry_id = cursor.lastrowid
+                INSERT INTO entries 
+                (definition_id, category_id, key, type, name, first, text, description, is_math)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                definition_id,
+                category_id,
+                key,
+                '\\acronymtype',
+                formatted_texts['name'],
+                formatted_texts['first'],
+                formatted_texts['text'],
+                description,
+                0
+            ))
+            entry_id = cursor.lastrowid
+            print(f"Nuovo entry_id: {entry_id}")
 
             # Aggiorna le opzioni di formattazione
-            for field, (widget, _) in widgets_info.items():
-                if widget:
-                    values = widget.get_values()
+            print("Salvataggio opzioni di formattazione")
+            for field_name in ['name', 'text', 'first']:
+                format_widget = getattr(self, f'{field_name}_format', None)
+                if format_widget:
+                    values = format_widget.get_values()
                     self.db_manager.execute('''
                         INSERT OR REPLACE INTO formatting_options 
                         (entry_id, field_name, format_type, is_math_mode, first_letter_bold)
                         VALUES (?, ?, ?, ?, ?)
                     ''', (
                         entry_id,
-                        field,
+                        field_name,
                         values['format_type'],
                         values['is_math_mode'],
                         values.get('first_letter_bold', False)
                     ))
+                    print(f"Formattazione salvata per {field_name}")
 
             self.db_manager.end_transaction()
+            print("Transazione completata con successo")
+            
             messagebox.showinfo("Successo", "Definizione salvata correttamente")
             self.update_entries_list()
             if hasattr(self, 'db_viewer'):
                 self.db_viewer.update_view()
+                # Aggiorna l'anteprima
+            self.update_preview()
 
         except sqlite3.Error as e:
             print(f"Errore durante il salvataggio: {str(e)}")
             self.db_manager.rollback()
             messagebox.showerror("Errore Database", f"Errore durante il salvataggio: {str(e)}")
-
-                
+        finally:
+            print("=== Fine Salvataggio Entry ===")
+              
     def on_closing(self):
         """Gestisce la chiusura dell'applicazione"""
         if messagebox.askokcancel("Esci", "Vuoi davvero uscire?"):
@@ -884,14 +1171,15 @@ class GlossaryEditor(tk.Tk):
         return text
     
     def clear_fields(self):
-        """Pulisce tutti i campi di input"""
         for field in self.fields.values():
+            if field == self.fields['group']:
+                continue
             if isinstance(field, tk.Text):
                 field.delete('1.0', tk.END)
             else:
                 field.delete(0, tk.END)
-        
-        # Reset delle opzioni di formattazione
+                
+        # Reset formattazioni
         for field_name in ['name', 'text', 'first']:
             if hasattr(self, f'{field_name}_format'):
                 format_widget = getattr(self, f'{field_name}_format')
@@ -900,10 +1188,22 @@ class GlossaryEditor(tk.Tk):
                     is_math_mode=False,
                     first_letter_bold=False
                 )
-        
-        # Reset altre variabili
+                
         self.math_mode.set(False)
         self.type_var.set('\\acronymtype')
+        
+        # Template base senza formattazione
+        base_template = '''\\newglossaryentry{}{
+            type=\\acronymtype,
+            name={},
+            first={},
+            text={},
+            description={},
+            group={}
+        }'''
+        
+        self.latex_preview.delete('1.0', tk.END)
+        self.latex_preview.insert('1.0', base_template)
     
     def delete_entry(self):
         """Elimina la definizione selezionata"""
@@ -976,83 +1276,6 @@ class GlossaryEditor(tk.Tk):
                 messagebox.showerror("Errore", 
                                    f"Errore durante l'esportazione: {str(e)}")
 
-    # def generate_latex(self):
-    #     """Genera il codice LaTeX per la definizione corrente"""
-    #     try:
-    #         # Prendi i valori dai campi
-    #         key = self.fields['key'].get().strip()
-    #         name = self.fields['name'].get().strip()
-    #         first = self.fields['first'].get().strip()
-    #         text = self.fields['text'].get().strip()
-    #         desc = self.fields['description'].get('1.0', tk.END).strip()
-    #         type_val = self.type_var.get().strip()
-
-    #         # Ottieni i valori di formattazione
-    #         name_format = self.name_format.get_values() if hasattr(self, 'name_format') else None
-    #         text_format = self.text_format.get_values() if hasattr(self, 'text_format') else None
-    #         first_format = self.first_format.get_values() if hasattr(self, 'first_format') else None
-
-    #         # Applica la formattazione
-    #         if name_format:
-    #             if name_format['is_math_mode']:
-    #                 if name_format['format_type'] != 'Normale':
-    #                     name = f"${name_format['format_type']}{{{name}}}$"
-    #                 else:
-    #                     name = f"${name}$"
-    #             elif name_format['format_type'] != 'Normale':
-    #                 name = f"{name_format['format_type']}{{{name}}}"
-
-    #         if text_format:
-    #             if text_format['is_math_mode']:
-    #                 if text_format['format_type'] != 'Normale':
-    #                     text = f"${text_format['format_type']}{{{text}}}$"
-    #                 else:
-    #                     text = f"${text}$"
-    #             elif text_format['format_type'] != 'Normale':
-    #                 text = f"{text_format['format_type']}{{{text}}}"
-
-    #         if first_format:
-    #             if first_format['first_letter_bold']:
-    #                 words = first.split()
-    #                 first = ' '.join('\\textbf{' + word[0] + '}' + word[1:] if word else '' for word in words)
-    #             elif first_format['format_type'] != 'Normale':
-    #                 first = f"{first_format['format_type']}{{{first}}}"
-
-    #         # Genera il codice LaTeX con la corretta indentazione
-    #         latex_code = f"""\\newglossaryentry{{{key}}}{{
-    #     type={type_val},
-    #     name={{{name}}},
-    #     first={{{first}}},
-    #     text={{{text}}},
-    #     description={{{desc}}}
-    # }}"""
-            
-    #         # Mostra il risultato in una nuova finestra
-    #         result = tk.Toplevel(self)
-    #         result.title("Codice LaTeX generato")
-            
-    #         text_widget = tk.Text(result, wrap=tk.NONE, height=10, width=80)
-    #         text_widget.pack(padx=10, pady=10)
-    #         text_widget.insert('1.0', latex_code)
-            
-    #         button_frame = ttk.Frame(result)
-    #         button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-            
-    #         def copy_to_clipboard():
-    #             self.clipboard_clear()
-    #             self.clipboard_append(latex_code)
-    #             messagebox.showinfo("Info", "Codice copiato negli appunti!")
-            
-    #         ttk.Button(button_frame, text="Copia", 
-    #                 command=copy_to_clipboard).pack(side=tk.LEFT)
-    #         ttk.Button(button_frame, text="Chiudi", 
-    #                 command=result.destroy).pack(side=tk.RIGHT)
-            
-    #     except Exception as e:
-    #         messagebox.showerror("Errore", f"Si è verificato un errore: {str(e)}")
-    #         print(f"Errore dettagliato: {str(e)}")
-    
-    
 
 if __name__ == "__main__":
     app = GlossaryEditor()
