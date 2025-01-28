@@ -1,4 +1,4 @@
-# ![glstex](/Users/tony/Documents/compprogram/compile/LGE/assets/glstex.png)LaTeX Glossary Editor - V2.3.0
+# LaTeX Glossary Editor - V2.3.0
 
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)![Status](https://img.shields.io/badge/status-stable-green.svg)![Last Commit](https://img.shields.io/badge/last_commit-January_2025-green.svg)
 
